@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>🌸 Letter Runner – Cozy Delivery</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #1a1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 700px;
+            aspect-ratio: 1/1;
+            background: radial-gradient(ellipse at 50% 50%, #f9e9d2 0%, #e8d5b5 100%);
+            border-radius: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), inset 0 0 80px rgba(255, 240, 200, 0.3);
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            cursor: pointer;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            touch-action: none;
+        }
+
+        #top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 14px 20px 0 20px;
+            pointer-events: none;
+        }
+
+        .stat {
+            background: rgba(255, 248, 235, 0.75);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            padding: 6px 14px 6px 12px;
+            border-radius: 40px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #4a3728;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 0.3px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            pointer-events: none;
+        }
+
+        .stat span {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .stat .num {
+            min-width: 24px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 248, 235, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #4a3728;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            pointer-events: none;
+            letter-spacing: 0.2px;
+            transition: opacity 0.6s ease;
+        }
+
+        #instructions.hidden {
+            opacity: 0;
+        }
+
+        #delivery-popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            font-size: 52px;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            text-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        #delivery-popup.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        @media (max-width: 500px) {
+            #game-wrapper {
+                border-radius: 0;
+                max-width: 100%;
+                aspect-ratio: 1/1;
+            }
+            .stat {
+                font-size: 13px;
+                padding: 4px 12px 4px 10px;
+            }
+            .stat span {
+                font-size: 15px;
+            }
+            #instructions {
+                font-size: 11px;
+                padding: 6px 14px;
+                bottom: 14px;
+                white-space: normal;
+                max-width: 80%;
+                text-align: center;
+            }
+            #top-bar {
+                padding: 10px 14px 0 14px;
+            }
+            #delivery-popup {
+                font-size: 38px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .stat {
+                font-size: 11px;
+                padding: 3px 10px 3px 8px;
+            }
+            .stat span {
+                font-size: 13px;
+            }
+            #instructions {
+                font-size: 10px;
+                padding: 4px 12px;
+                bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <canvas id="game"></canvas>
+
+        <div id="ui-overlay">
+            <div id="top-bar">
+                <div class="stat" id="score-display">
+                    <span>📦</span>
+                    <span class="num" id="score-num">0</span>
+                </div>
+                <div class="stat" id="deliveries-display">
+                    <span>✅</span>
+                    <span class="num" id="deliveries-num">0</span>
+                </div>
+            </div>
+
+            <div id="instructions">🌱 Tap or click to move · Deliver parcels to matching houses</div>
+
+            <div id="delivery-popup">✨</div>
+        </div>
+    </div>
+
+    <script>
+        // ─── SETUP ────────────────────────────────────────────────
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('game-wrapper');
+
+        let W, H, scale, centerX, centerY, planetRadius;
+
+        function resize() {
+            const rect = wrapper.getBoundingClientRect();
+            canvas.width = rect.width * devicePixelRatio;
+            canvas.height = rect.height * devicePixelRatio;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            W = canvas.width;
+            H = canvas.height;
+            scale = Math.min(W, H) / 700;
+            centerX = W / 2;
+            centerY = H / 2;
+            planetRadius = Math.min(W, H) * 0.38;
+            ctx.scale(1, 1);
+            // Recalculate positions for houses and such
+            if (typeof repositionEntities === 'function') repositionEntities();
+        }
+
+        // ─── COZY PALETTE ────────────────────────────────────────
+        const COLORS = {
+            grass1: '#b8d9b0',
+            grass2: '#a8cc9e',
+            grass3: '#8fbc86',
+            path: '#dcc9a3',
+            earth: '#c9b594',
+            houseWall: '#f5ede4',
+            roof: ['#e87a7a', '#7ab8d9', '#e8c87a', '#b8a8e8', '#7ad9b8'],
+            roofDark: ['#c96a6a', '#6aa8c9', '#c9b86a', '#a898d9', '#6ac9a8'],
+            door: '#8b7a6a',
+            window: '#c9e8f5',
+            parcel: ['#e87a7a', '#7ab8d9', '#e8c87a', '#b8a8e8', '#7ad9b8'],
+            player: '#f5b87a',
+            playerHat: '#e8a060',
+            bot: ['#e8a0b8', '#a0c8e8', '#c8e0a0', '#e8c8a0', '#c0a8e8'],
+            text: '#4a3728',
+            shadow: 'rgba(0,0,0,0.10)',
+            glow: 'rgba(255,240,200,0.15)',
+        };
+
+        // ─── AUDIO (Web Audio – ambient drone + pluck) ────────
+        let audioCtx = null;
+        let audioInitialized = false;
+        let ambientOsc = null;
+        let ambientGain = null;
+        let pluckGain = null;
+
+        function initAudio() {
+            if (audioInitialized) return;
+            try {
+                audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+
+                // Ambient drone: soft sine wave
+                ambientOsc = audioCtx.createOscillator();
+                ambientGain = audioCtx.createGain();
+                ambientOsc.type = 'sine';
+                ambientOsc.frequency.setValueAtTime(220, audioCtx.currentTime);
+                ambientGain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                ambientOsc.connect(ambientGain);
+                ambientGain.connect(audioCtx.destination);
+                ambientOsc.start();
+
+                // Soft filter for warmth
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+                ambientOsc.disconnect();
+                ambientOsc.connect(filter);
+                filter.connect(ambientGain);
+
+                // Pluck sound
+                pluckGain = audioCtx.createGain();
+                pluckGain.gain.setValueAtTime(0, audioCtx.currentTime);
+                pluckGain.connect(audioCtx.destination);
+
+                audioInitialized = true;
+            } catch (_) { /* silently fail */ }
+        }
+
+        function playPluck(freq = 880, dur = 0.25) {
+            if (!audioInitialized || !audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + dur);
+            } catch (_) { /* ignore */ }
+        }
+
+        function playDeliverySound() {
+            playPluck(1047, 0.15);
+            setTimeout(() => playPluck(1319, 0.2), 120);
+            setTimeout(() => playPluck(1568, 0.25), 240);
+        }
+
+        function playPickupSound() {
+            playPluck(660, 0.1);
+        }
+
+        // ─── GAME STATE ──────────────────────────────────────────
+        const game = {
+            score: 0,
+            deliveries: 0,
+            state: 'playing', // 'playing' | 'delivered'
+            time: 0,
+            particles: [],
+            emojis: [],
+            floatingTexts: [],
+        };
+
+        // ─── ENTITIES ─────────────────────────────────────────────
+        let player = null;
+        let houses = [];
+        let parcels = [];
+        let bots = [];
+        let targetPos = null;
+
+        const HOUSE_COLORS = ['#e87a7a', '#7ab8d9', '#e8c87a', '#b8a8e8', '#7ad9b8'];
+        const EMOJIS = ['🌸', '🌱', '✨', '☀️', '🌿', '🌻', '🍃', '💫', '🌺', '🕊️'];
+
+        function createPlayer() {
+            return {
+                x: centerX,
+                y: centerY - planetRadius * 0.2,
+                radius: 12 * scale,
+                color: COLORS.player,
+                hatColor: COLORS.playerHat,
+                speed: 120 * scale,
+                carrying: null, // parcel object or null
+                targetX: null,
+                targetY: null,
+                moving: false,
+                animTime: 0,
+                facing: 0, // radians
+            };
+        }
+
+        function createHouse(index, angle) {
+            const dist = planetRadius * 0.72;
+            const x = centerX + Math.cos(angle) * dist;
+            const y = centerY + Math.sin(angle) * dist;
+            const colorIdx = index % HOUSE_COLORS.length;
+            return {
+                x,
+                y,
+                angle,
+                color: HOUSE_COLORS[colorIdx],
+                colorDark: COLORS.roofDark[colorIdx],
+                radius: 18 * scale,
+                index: colorIdx,
+                delivered: false,
+                size: 16 * scale,
+                doorX: 0,
+                doorY: 0,
+            };
+        }
+
+        function createParcel() {
+            const available = houses.filter(h => !h.delivered);
+            if (available.length === 0) return null;
+            const targetHouse = available[Math.floor(Math.random() * available.length)];
+            // Spawn at random position on planet, not too close to edge
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * planetRadius * 0.55 + planetRadius * 0.15;
+            const x = centerX + Math.cos(angle) * dist;
+            const y = centerY + Math.sin(angle) * dist;
+            return {
+                x,
+                y,
+                targetHouse: targetHouse,
+                color: targetHouse.color,
+                radius: 8 * scale,
+                collected: false,
+                bobPhase: Math.random() * Math.PI * 2,
+            };
+        }
+
+        function createBot(index) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * planetRadius * 0.5 + planetRadius * 0.15;
+            const x = centerX + Math.cos(angle) * dist;
+            const y = centerY + Math.sin(angle) * dist;
+            const colorIdx = index % COLORS.bot.length;
+            return {
+                x,
+                y,
+                radius: 10 * scale,
+                color: COLORS.bot[colorIdx],
+                angle: Math.random() * Math.PI * 2,
+                speed: (20 + Math.random() * 25) * scale,
+                targetX: x,
+                targetY: y,
+                emoji: EMOJIS[index % EMOJIS.length],
+                emojiTimer: 0,
+                emojiVisible: false,
+                emojiText: '',
+                wanderTimer: 0,
+                bobPhase: Math.random() * Math.PI * 2,
+                index,
+            };
+        }
+
+        function repositionEntities() {
+            // Recreate houses and bots on resize
+            if (houses.length === 0) {
+                const numHouses = 5;
+                for (let i = 0; i < numHouses; i++) {
+                    const angle = (i / numHouses) * Math.PI * 2 - Math.PI / 2;
+                    houses.push(createHouse(i, angle));
+                }
+            } else {
+                // Update house positions
+                const numHouses = houses.length;
+                for (let i = 0; i < numHouses; i++) {
+                    const angle = (i / numHouses) * Math.PI * 2 - Math.PI / 2;
+                    const dist = planetRadius * 0.72;
+                    houses[i].x = centerX + Math.cos(angle) * dist;
+                    houses[i].y = centerY + Math.sin(angle) * dist;
+                    houses[i].radius = 18 * scale;
+                    houses[i].size = 16 * scale;
+                }
+            }
+
+            if (player) {
+                player.radius = 12 * scale;
+                player.speed = 120 * scale;
+            }
+
+            // Update bots
+            for (let i = 0; i < bots.length; i++) {
+                bots[i].radius = 10 * scale;
+                bots[i].speed = (20 + (i % 3) * 8) * scale;
+            }
+
+            // Update parcels
+            for (const p of parcels) {
+                p.radius = 8 * scale;
+            }
+        }
+
+        // ─── INIT ──────────────────────────────────────────────────
+        function initGame() {
+            player = createPlayer();
+            houses = [];
+            parcels = [];
+            bots = [];
+            game.particles = [];
+            game.emojis = [];
+            game.floatingTexts = [];
+            game.score = 0;
+            game.deliveries = 0;
+            targetPos = null;
+
+            const numHouses = 5;
+            for (let i = 0; i < numHouses; i++) {
+                const angle = (i / numHouses) * Math.PI * 2 - Math.PI / 2;
+                houses.push(createHouse(i, angle));
+            }
+
+            // Spawn initial parcel
+            const p = createParcel();
+            if (p) parcels.push(p);
+
+            // Create bots
+            const numBots = 3 + Math.floor(Math.random() * 2);
+            for (let i = 0; i < numBots; i++) {
+                bots.push(createBot(i));
+            }
+
+            updateUI();
+            document.getElementById('delivery-popup').classList.remove('show');
+            document.getElementById('instructions').classList.remove('hidden');
+        }
+
+        // ─── UI UPDATE ───────────────────────────────────────────
+        function updateUI() {
+            document.getElementById('score-num').textContent = game.score;
+            document.getElementById('deliveries-num').textContent = game.deliveries;
+        }
+
+        function showDeliveryPopup() {
+            const popup = document.getElementById('delivery-popup');
+            popup.textContent = '✨';
+            popup.classList.add('show');
+            setTimeout(() => popup.classList.remove('show'), 600);
+        }
+
+        // ─── INPUT ────────────────────────────────────────────────
+        function handlePointer(clientX, clientY) {
+            if (!player) return;
+            if (!audioInitialized) initAudio();
+
+            const rect = canvas.getBoundingClientRect();
+            const x = (clientX - rect.left) * (canvas.width / rect.width);
+            const y = (clientY - rect.top) * (canvas.height / rect.height);
+
+            // Check if click is on the planet
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > planetRadius * 0.85) return;
+
+            targetPos = { x, y };
+            player.targetX = x;
+            player.targetY = y;
+            player.moving = true;
+
+            // Hide instructions after first interaction
+            document.getElementById('instructions').classList.add('hidden');
+        }
+
+        // Mouse
+        canvas.addEventListener('click', (e) => {
+            handlePointer(e.clientX, e.clientY);
+        });
+
+        // Touch
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (touch) handlePointer(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (touch) handlePointer(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (!player) return;
+            if (!audioInitialized) initAudio();
+
+            const move = 15 * scale;
+            let dx = 0,
+                dy = 0;
+            if (e.key === 'w' || e.key === 'ArrowUp') dy = -move;
+            if (e.key === 's' || e.key === 'ArrowDown') dy = move;
+            if (e.key === 'a' || e.key === 'ArrowLeft') dx = -move;
+            if (e.key === 'd' || e.key === 'ArrowRight') dx = move;
+
+            if (dx !== 0 || dy !== 0) {
+                e.preventDefault();
+                const nx = player.x + dx;
+                const ny = player.y + dy;
+                const d = Math.sqrt((nx - centerX) ** 2 + (ny - centerY) ** 2);
+                if (d < planetRadius * 0.85) {
+                    player.x = nx;
+                    player.y = ny;
+                    player.moving = true;
+                    player.targetX = nx;
+                    player.targetY = ny;
+                    player.facing = Math.atan2(dy, dx);
+                }
+                document.getElementById('instructions').classList.add('hidden');
+            }
+        });
+
+        // ─── UPDATE ──────────────────────────────────────────────
+        function update(dt) {
+            if (!player) return;
+            game.time += dt;
+
+            // ── Player movement ──
+            if (player.targetX !== null && player.targetY !== null) {
+                const dx = player.targetX - player.x;
+                const dy = player.targetY - player.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 2 * scale) {
+                    const step = player.speed * dt;
+                    const move = Math.min(step, dist);
+                    player.x += (dx / dist) * move;
+                    player.y += (dy / dist) * move;
+                    player.facing = Math.atan2(dy, dx);
+                    player.moving = true;
+                } else {
+                    player.x = player.targetX;
+                    player.y = player.targetY;
+                    player.moving = false;
+                }
+            }
+
+            // Keep player on planet
+            const pd = Math.sqrt((player.x - centerX) ** 2 + (player.y - centerY) ** 2);
+            if (pd > planetRadius * 0.85) {
+                const angle = Math.atan2(player.y - centerY, player.x - centerX);
+                player.x = centerX + Math.cos(angle) * planetRadius * 0.85;
+                player.y = centerY + Math.sin(angle) * planetRadius * 0.85;
+            }
+
+            player.animTime += dt;
+
+            // ── Parcel pickup ──
+            for (const p of parcels) {
+                if (p.collected) continue;
+                const dx = player.x - p.x;
+                const dy = player.y - p.y;
+                if (Math.sqrt(dx * dx + dy * dy) < player.radius + p.radius + 6 * scale) {
+                    if (!player.carrying) {
+                        p.collected = true;
+                        player.carrying = p;
+                        playPickupSound();
+                        // Spawn particles
+                        for (let i = 0; i < 8; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const speed = (20 + Math.random() * 40) * scale;
+                            game.particles.push({
+                                x: p.x,
+                                y: p.y,
+                                vx: Math.cos(angle) * speed,
+                                vy: Math.sin(angle) * speed - 20 * scale,
+                                life: 0.6 + Math.random() * 0.4,
+                                maxLife: 0.6 + Math.random() * 0.4,
+                                radius: (2 + Math.random() * 4) * scale,
+                                color: p.color,
+                            });
+                        }
+                        // Show floating "+1 📦"
+                        game.floatingTexts.push({
+                            x: p.x,
+                            y: p.y - 20 * scale,
+                            text: '📦 +1',
+                            life: 1.0,
+                            maxLife: 1.0,
+                            vy: -50 * scale,
+                        });
+                    }
+                }
+            }
+
+            // ── Delivery ──
+            if (player.carrying) {
+                const parcel = player.carrying;
+                const house = parcel.targetHouse;
+                if (house && !house.delivered) {
+                    const dx = player.x - house.x;
+                    const dy = player.y - house.y;
+                    if (Math.sqrt(dx * dx + dy * dy) < house.radius + player.radius + 8 * scale) {
+                        // Deliver!
+                        house.delivered = true;
+                        game.deliveries++;
+                        game.score += 10;
+                        player.carrying = null;
+                        playDeliverySound();
+                        showDeliveryPopup();
+
+                        // Spawn celebration particles
+                        for (let i = 0; i < 20; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const speed = (30 + Math.random() * 80) * scale;
+                            game.particles.push({
+                                x: house.x,
+                                y: house.y,
+                                vx: Math.cos(angle) * speed,
+                                vy: Math.sin(angle) * speed - 30 * scale,
+                                life: 0.8 + Math.random() * 0.6,
+                                maxLife: 0.8 + Math.random() * 0.6,
+                                radius: (3 + Math.random() * 6) * scale,
+                                color: house.color,
+                            });
+                        }
+
+                        // Floating text
+                        game.floatingTexts.push({
+                            x: house.x,
+                            y: house.y - 30 * scale,
+                            text: '✨ Delivered! +10',
+                            life: 1.2,
+                            maxLife: 1.2,
+                            vy: -60 * scale,
+                        });
+
+                        // Spawn new parcel
+                        const newParcel = createParcel();
+                        if (newParcel) {
+                            parcels.push(newParcel);
+                            // Reset all houses for next round
+                            // (only if all houses are delivered)
+                            const allDelivered = houses.every(h => h.delivered);
+                            if (allDelivered) {
+                                for (const h of houses) h.delivered = false;
+                            }
+                        }
+
+                        updateUI();
+                    }
+                }
+            }
+
+            // ── Parcel bobbing ──
+            for (const p of parcels) {
+                if (!p.collected) {
+                    p.bobPhase += dt * 2;
+                }
+            }
+
+            // ── Bots ──
+            for (const bot of bots) {
+                bot.bobPhase += dt * 1.5;
+                bot.wanderTimer -= dt;
+                if (bot.wanderTimer <= 0) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = Math.random() * planetRadius * 0.5 + planetRadius * 0.15;
+                    bot.targetX = centerX + Math.cos(angle) * dist;
+                    bot.targetY = centerY + Math.sin(angle) * dist;
+                    bot.wanderTimer = 1.5 + Math.random() * 3;
+                }
+
+                const dx = bot.targetX - bot.x;
+                const dy = bot.targetY - bot.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 4 * scale) {
+                    const step = bot.speed * dt;
+                    const move = Math.min(step, dist);
+                    bot.x += (dx / dist) * move;
+                    bot.y += (dy / dist) * move;
+                    bot.angle = Math.atan2(dy, dx);
+                }
+
+                // Keep on planet
+                const pd2 = Math.sqrt((bot.x - centerX) ** 2 + (bot.y - centerY) ** 2);
+                if (pd2 > planetRadius * 0.82) {
+                    const a = Math.atan2(bot.y - centerY, bot.x - centerX);
+                    bot.x = centerX + Math.cos(a) * planetRadius * 0.82;
+                    bot.y = centerY + Math.sin(a) * planetRadius * 0.82;
+                }
+
+                // Emoji timer
+                bot.emojiTimer -= dt;
+                if (bot.emojiTimer <= 0) {
+                    bot.emojiVisible = true;
+                    bot.emojiText = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+                    bot.emojiTimer = 0.8 + Math.random() * 1.5;
+                    // Add to global emoji list for floating effect
+                    game.emojis.push({
+                        x: bot.x,
+                        y: bot.y - 30 * scale,
+                        text: bot.emojiText,
+                        life: 1.2,
+                        maxLife: 1.2,
+                        vy: -25 * scale,
+                    });
+                }
+            }
+
+            // ── Particles ──
+            for (let i = game.particles.length - 1; i >= 0; i--) {
+                const p = game.particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 80 * scale * dt;
+                p.life -= dt;
+                if (p.life <= 0) game.particles.splice(i, 1);
+            }
+
+            // ── Floating texts ──
+            for (let i = game.floatingTexts.length - 1; i >= 0; i--) {
+                const ft = game.floatingTexts[i];
+                ft.y += ft.vy * dt;
+                ft.life -= dt;
+                if (ft.life <= 0) game.floatingTexts.splice(i, 1);
+            }
+
+            // ── Global emojis ──
+            for (let i = game.emojis.length - 1; i >= 0; i--) {
+                const e = game.emojis[i];
+                e.y += e.vy * dt;
+                e.life -= dt;
+                if (e.life <= 0) game.emojis.splice(i, 1);
+            }
+
+            // ── Ambient particle spawn (leaves) ──
+            if (Math.random() < dt * 0.4) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = planetRadius * 0.85;
+                game.particles.push({
+                    x: centerX + Math.cos(angle) * dist,
+                    y: centerY + Math.sin(angle) * dist,
+                    vx: (Math.random() - 0.5) * 20 * scale,
+                    vy: -(10 + Math.random() * 25) * scale,
+                    life: 2 + Math.random() * 2,
+                    maxLife: 2 + Math.random() * 2,
+                    radius: (2 + Math.random() * 4) * scale,
+                    color: '#b8d9b0',
+                    isLeaf: true,
+                });
+            }
+
+            // ── Clean up collected parcels ──
+            parcels = parcels.filter(p => !p.collected || p === player.carrying);
+
+            // If no parcels left, spawn one
+            if (parcels.length === 0 && !player.carrying) {
+                const np = createParcel();
+                if (np) parcels.push(np);
+            }
+        }
+
+        // ─── DRAW ──────────────────────────────────────────────────
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // ── Background ──
+            const grad = ctx.createRadialGradient(centerX, centerY - planetRadius * 0.5, 0, centerX, centerY, planetRadius *
+            1.2);
+            grad.addColorStop(0, '#fdf6ed');
+            grad.addColorStop(0.5, '#f5ead5');
+            grad.addColorStop(1, '#e8d5b5');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // ── Planet glow ──
+            const glow = ctx.createRadialGradient(centerX, centerY, planetRadius * 0.3, centerX, centerY, planetRadius * 1.05);
+            glow.addColorStop(0, 'rgba(255,248,230,0.0)');
+            glow.addColorStop(0.7, 'rgba(255,248,230,0.05)');
+            glow.addColorStop(1, 'rgba(200,180,150,0.15)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, planetRadius * 1.05, 0, Math.PI * 2);
+            ctx.fill();
+
+            // ── Planet ──
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, planetRadius, 0, Math.PI * 2);
+            ctx.clip();
+
+            // Grass base
+            const grassGrad = ctx.createRadialGradient(centerX - planetRadius * 0.2, centerY - planetRadius * 0.2, 0, centerX,
+                centerY, planetRadius);
+            grassGrad.addColorStop(0, '#c5e0b8');
+            grassGrad.addColorStop(0.5, '#b0d4a0');
+            grassGrad.addColorStop(1, '#95c085');
+            ctx.fillStyle = grassGrad;
+            ctx.fillRect(centerX - planetRadius, centerY - planetRadius, planetRadius * 2, planetRadius * 2);
+
+            // Grass texture (subtle dots)
+            ctx.globalAlpha = 0.08;
+            for (let i = 0; i < 120; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const d = Math.random() * planetRadius * 0.85;
+                const x = centerX + Math.cos(a) * d;
+                const y = centerY + Math.sin(a) * d;
+                ctx.fillStyle = i % 2 === 0 ? '#7a9a6a' : '#a0c890';
+                ctx.beginPath();
+                ctx.arc(x, y, (1 + Math.random() * 2) * scale, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // ── Paths (subtle) ──
+            ctx.strokeStyle = 'rgba(200,180,150,0.2)';
+            ctx.lineWidth = 4 * scale;
+            for (let i = 0; i < houses.length; i++) {
+                const h = houses[i];
+                const next = houses[(i + 1) % houses.length];
+                ctx.beginPath();
+                ctx.moveTo(h.x, h.y);
+                ctx.lineTo(next.x, next.y);
+                ctx.stroke();
+            }
+
+            // ── Houses ──
+            for (const h of houses) {
+                drawHouse(h);
+            }
+
+            // ── Parcels ──
+            for (const p of parcels) {
+                if (p.collected) continue;
+                drawParcel(p);
+            }
+
+            // ── Carried parcel ──
+            if (player && player.carrying) {
+                const p = player.carrying;
+                const px = player.x + Math.cos(player.facing) * 16 * scale;
+                const py = player.y + Math.sin(player.facing) * 16 * scale - 6 * scale;
+                drawParcelAt(px, py, p.color, true);
+            }
+
+            // ── Bots ──
+            for (const bot of bots) {
+                drawBot(bot);
+            }
+
+            // ── Player ──
+            if (player) {
+                drawPlayer(player);
+            }
+
+            // ── Particles ──
+            for (const p of game.particles) {
+                const alpha = p.life / p.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = p.color || '#c8d8b8';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius * (0.3 + 0.7 * alpha), 0, Math.PI * 2);
+                ctx.fill();
+                if (p.isLeaf) {
+                    ctx.fillStyle = '#b8d9a8';
+                    ctx.beginPath();
+                    ctx.ellipse(p.x, p.y, p.radius * 1.5, p.radius * 0.6, p.life * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            ctx.globalAlpha = 1;
+
+            // ── Floating texts ──
+            for (const ft of game.floatingTexts) {
+                const alpha = ft.life / ft.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.font = `bold ${20 * scale}px "Segoe UI", system-ui, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#4a3728';
+                ctx.shadowColor = 'rgba(255,248,235,0.8)';
+                ctx.shadowBlur = 12 * scale;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.shadowBlur = 0;
+            }
+            ctx.globalAlpha = 1;
+
+            // ── Floating emojis ──
+            for (const e of game.emojis) {
+                const alpha = e.life / e.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.font = `${24 * scale}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(e.text, e.x, e.y);
+            }
+            ctx.globalAlpha = 1;
+
+            // ── Planet edge ──
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, planetRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(180,160,130,0.15)';
+            ctx.lineWidth = 3 * scale;
+            ctx.stroke();
+
+            // Outer glow ring
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, planetRadius + 4 * scale, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255,240,210,0.08)';
+            ctx.lineWidth = 8 * scale;
+            ctx.stroke();
+
+            // ── Cozy vignette ──
+            const vig = ctx.createRadialGradient(centerX, centerY, planetRadius * 0.4, centerX, centerY, planetRadius * 1.2);
+            vig.addColorStop(0, 'rgba(0,0,0,0)');
+            vig.addColorStop(1, 'rgba(30,20,10,0.08)');
+            ctx.fillStyle = vig;
+            ctx.fillRect(0, 0, W, H);
+        }
+
+        // ── Draw helpers ──
+
+        function drawHouse(h) {
+            const s = h.size;
+            const x = h.x;
+            const y = h.y;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.06)';
+            ctx.beginPath();
+            ctx.ellipse(x + 2 * scale, y + 4 * scale, s * 0.9, s * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Wall
+            ctx.fillStyle = h.delivered ? '#ddd5c8' : COLORS.houseWall;
+            ctx.shadowColor = 'rgba(0,0,0,0.04)';
+            ctx.shadowBlur = 8 * scale;
+            ctx.shadowOffsetY = 2 * scale;
+            const w = s * 1.3;
+            const hh = s * 0.9;
+            ctx.beginPath();
+            ctx.roundRect(x - w / 2, y - hh * 0.3, w, hh, 3 * scale);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Roof
+            const roofColor = h.delivered ? '#c0b8a8' : h.color;
+            ctx.fillStyle = roofColor;
+            ctx.beginPath();
+            ctx.moveTo(x - w * 0.65, y - hh * 0.3);
+            ctx.lineTo(x, y - hh * 1.0);
+            ctx.lineTo(x + w * 0.65, y - hh * 0.3);
+            ctx.closePath();
+            ctx.fill();
+
+            // Roof highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.beginPath();
+            ctx.moveTo(x - w * 0.35, y - hh * 0.5);
+            ctx.lineTo(x, y - hh * 0.85);
+            ctx.lineTo(x + w * 0.35, y - hh * 0.5);
+            ctx.closePath();
+            ctx.fill();
+
+            // Door
+            ctx.fillStyle = h.delivered ? '#a09888' : COLORS.door;
+            const dw = s * 0.25;
+            const dh = s * 0.4;
+            ctx.beginPath();
+            ctx.roundRect(x - dw / 2, y + hh * 0.15, dw, dh, 2 * scale);
+            ctx.fill();
+
+            // Door knob
+            ctx.fillStyle = 'rgba(255,200,100,0.3)';
+            ctx.beginPath();
+            ctx.arc(x + dw * 0.3, y + hh * 0.35, 1.5 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Window
+            if (!h.delivered) {
+                ctx.fillStyle = 'rgba(200,230,245,0.3)';
+                ctx.beginPath();
+                ctx.roundRect(x - s * 0.2, y - hh * 0.1, s * 0.3, s * 0.25, 2 * scale);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(120,100,80,0.15)';
+                ctx.lineWidth = 1 * scale;
+                ctx.beginPath();
+                ctx.roundRect(x - s * 0.2, y - hh * 0.1, s * 0.3, s * 0.25, 2 * scale);
+                ctx.stroke();
+            }
+
+            // Delivery indicator
+            if (h.delivered) {
+                ctx.font = `${12 * scale}px "Segoe UI Emoji", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('✅', x, y - s * 0.4);
+            }
+        }
+
+        function drawParcel(p) {
+            const bob = Math.sin(p.bobPhase) * 2 * scale;
+            drawParcelAt(p.x, p.y + bob, p.color, false);
+        }
+
+        function drawParcelAt(x, y, color, carried) {
+            const s = 8 * scale;
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.06)';
+            ctx.beginPath();
+            ctx.ellipse(x + 1 * scale, y + s * 0.8, s * 0.7, s * 0.25, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Box
+            const grad = ctx.createLinearGradient(x - s, y - s, x + s, y + s);
+            const c = color || '#e87a7a';
+            grad.addColorStop(0, c);
+            grad.addColorStop(0.7, c);
+            grad.addColorStop(1, c);
+            ctx.fillStyle = grad;
+            ctx.shadowColor = 'rgba(0,0,0,0.06)';
+            ctx.shadowBlur = 6 * scale;
+            ctx.shadowOffsetY = 2 * scale;
+            ctx.beginPath();
+            ctx.roundRect(x - s, y - s, s * 2, s * 2, 2 * scale);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Ribbon
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(x - s * 0.15, y - s, s * 0.3, s * 2);
+            ctx.fillRect(x - s, y - s * 0.15, s * 2, s * 0.3);
+
+            // Bow
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.beginPath();
+            ctx.arc(x - s * 0.5, y - s, s * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + s * 0.5, y - s, s * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            ctx.beginPath();
+            ctx.arc(x - s * 0.35, y - s * 0.4, s * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPlayer(p) {
+            const r = p.radius;
+            const bob = Math.sin(p.animTime * 4) * 1.2 * scale * (p.moving ? 1 : 0);
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.06)';
+            ctx.beginPath();
+            ctx.ellipse(p.x + 1 * scale, p.y + r * 0.7 + bob, r * 0.8, r * 0.25, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Body
+            const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3 + bob, 0, p.x, p.y + bob, r);
+            grad.addColorStop(0, '#fccf9e');
+            grad.addColorStop(0.6, '#f5b87a');
+            grad.addColorStop(1, '#e8a060');
+            ctx.fillStyle = grad;
+            ctx.shadowColor = 'rgba(0,0,0,0.04)';
+            ctx.shadowBlur = 8 * scale;
+            ctx.shadowOffsetY = 2 * scale;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y + bob, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Hat
+            ctx.fillStyle = p.hatColor;
+            const hatW = r * 1.2;
+            const hatH = r * 0.6;
+            ctx.beginPath();
+            ctx.ellipse(p.x, p.y - r * 0.5 + bob, hatW * 0.7, hatH * 0.4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#d49060';
+            ctx.beginPath();
+            ctx.ellipse(p.x, p.y - r * 0.6 + bob, hatW * 0.4, hatH * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eyes
+            const eyeOff = r * 0.3;
+            const eyeR = r * 0.2;
+            const lookX = Math.cos(p.facing) * 0.1 * r;
+            const lookY = Math.sin(p.facing) * 0.1 * r;
+
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(p.x - eyeOff + lookX * 0.5, p.y - r * 0.15 + bob + lookY * 0.3, eyeR * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(p.x + eyeOff + lookX * 0.5, p.y - r * 0.15 + bob + lookY * 0.3, eyeR * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#4a3728';
+            ctx.beginPath();
+            ctx.arc(p.x - eyeOff + lookX, p.y - r * 0.15 + bob + lookY * 0.4, eyeR * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(p.x + eyeOff + lookX, p.y - r * 0.15 + bob + lookY * 0.4, eyeR * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Blush
+            ctx.fillStyle = 'rgba(255,150,150,0.15)';
+            ctx.beginPath();
+            ctx.arc(p.x - eyeOff * 1.2, p.y + r * 0.1 + bob, r * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(p.x + eyeOff * 1.2, p.y + r * 0.1 + bob, r * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Smile
+            ctx.strokeStyle = '#c08060';
+            ctx.lineWidth = 1.2 * scale;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y + r * 0.05 + bob, r * 0.25, 0.1, Math.PI - 0.1);
+            ctx.stroke();
+
+            // Carrying indicator
+            if (p.carrying) {
+                ctx.font = `${14 * scale}px "Segoe UI Emoji", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('📦', p.x + r * 0.3, p.y - r * 0.8 + bob);
+            }
+        }
+
+        function drawBot(b) {
+            const r = b.radius;
+            const bob = Math.sin(b.bobPhase) * 1.5 * scale;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.04)';
+            ctx.beginPath();
+            ctx.ellipse(b.x + 1 * scale, b.y + r * 0.7 + bob, r * 0.7, r * 0.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Body
+            ctx.fillStyle = b.color;
+            ctx.shadowColor = 'rgba(0,0,0,0.02)';
+            ctx.shadowBlur = 4 * scale;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y + bob, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Eyes (simple dots)
+            ctx.fillStyle = '#4a3728';
+            const eo = r * 0.25;
+            ctx.beginPath();
+            ctx.arc(b.x - eo, b.y - r * 0.1 + bob, r * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(b.x + eo, b.y - r * 0.1 + bob, r * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Small smile
+            ctx.strokeStyle = 'rgba(74,55,40,0.3)';
+            ctx.lineWidth = 0.8 * scale;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y + r * 0.1 + bob, r * 0.15, 0.1, Math.PI - 0.1);
+            ctx.stroke();
+
+            // Emoji bubble (shown separately in global emojis)
+        }
+
+        // ─── roundRect polyfill for canvas ──
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                if (r > w / 2) r = w / 2;
+                if (r > h / 2) r = h / 2;
+                this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r);
+                return this;
+            };
+        }
+
+        // ─── GAME LOOP ──────────────────────────────────────────
+        let lastTime = 0;
+
+        function gameLoop(timestamp) {
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+            lastTime = timestamp;
+
+            update(dt);
+            draw();
+            updateUI();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ─── RESIZE ──────────────────────────────────────────────
+        window.addEventListener('resize', () => {
+            resize();
+            repositionEntities();
+        });
+
+        // ─── START ──────────────────────────────────────────────
+        resize();
+        initGame();
+
+        // Start audio on first user interaction
+        const startAudio = () => {
+            if (!audioInitialized) initAudio();
+            document.removeEventListener('click', startAudio);
+            document.removeEventListener('touchstart', startAudio);
+        };
+        document.addEventListener('click', startAudio);
+        document.addEventListener('touchstart', startAudio);
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+  </html>
